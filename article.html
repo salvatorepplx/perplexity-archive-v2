@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Article — The Perplexity Archive</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Source+Sans+3:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <style>
+        .article-page { min-height: 100vh; padding-top: 72px; }
+        .article-container { max-width: 900px; margin: 0 auto; padding: 64px 40px; }
+        .back-link { display: inline-flex; align-items: center; gap: 8px; color: var(--text-secondary); margin-bottom: 40px; text-decoration: none; }
+        .back-link:hover { color: var(--cyan); }
+        .article-page-header { margin-bottom: 40px; padding-bottom: 40px; border-bottom: 1px solid var(--border); }
+        .article-page-meta { display: flex; gap: 16px; margin-bottom: 16px; }
+        .article-page-category { background: var(--light-teal); color: var(--teal); padding: 4px 16px; border-radius: 100px; font-size: 14px; font-weight: 600; }
+        .article-page-confidence { display: flex; align-items: center; gap: 4px; font-size: 14px; font-weight: 500; }
+        .article-page-confidence.high { color: #059669; }
+        .article-page-title { font-family: var(--font-display); font-size: clamp(2rem, 5vw, 3.5rem); margin-bottom: 16px; }
+        .article-page-excerpt { font-size: 1.25rem; color: var(--text-secondary); line-height: 1.6; }
+        .article-page-stats { display: flex; gap: 24px; margin-top: 24px; font-size: 14px; color: var(--text-muted); }
+        .article-full-content { font-size: 1.125rem; line-height: 1.8; }
+        .article-full-content h2 { font-size: 1.75rem; margin: 40px 0 16px; padding-top: 24px; border-top: 1px solid var(--border); }
+        .article-full-content p { margin-bottom: 16px; }
+        .article-sources { background: var(--offblack); color: white; border-radius: 16px; padding: 40px; margin: 40px 0; }
+        .sources-title { display: flex; align-items: center; gap: 8px; font-size: 1.25rem; margin-bottom: 24px; }
+        .source-item { display: flex; gap: 16px; padding: 16px 0; border-bottom: 1px solid rgba(255,255,255,0.1); }
+        .source-item:last-child { border-bottom: none; }
+        .source-number { width: 28px; height: 28px; background: var(--cyan); color: var(--offblack); border-radius: 6px; display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 14px; }
+        .source-details { flex: 1; }
+        .source-title a { color: white; text-decoration: none; }
+        .source-title a:hover { color: var(--cyan); }
+        .source-meta { font-size: 13px; color: rgba(255,255,255,0.6); margin-top: 4px; }
+        .loading-state { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 50vh; gap: 16px; }
+        .loading-spinner { width: 48px; height: 48px; border: 3px solid var(--border); border-top-color: var(--cyan); border-radius: 50%; animation: spin 1s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .error-state { text-align: center; padding: 96px 40px; }
+        .error-state h2 { margin-bottom: 16px; }
+        .error-state p { color: var(--text-muted); margin-bottom: 40px; }
+    </style>
+</head>
+<body>
+    <nav class="nav">
+        <div class="nav-container">
+            <a href="index.html" class="nav-logo">
+                <div class="logo-icon">
+                    <svg viewBox="0 0 32 32" fill="none"><path d="M16 2L4 10v12l12 8 12-8V10L16 2z" stroke="currentColor" stroke-width="2" fill="none"/><circle cx="16" cy="16" r="3" fill="currentColor"/></svg>
+                </div>
+                <span>The Perplexity Archive</span>
+            </a>
+            <div class="nav-links">
+                <a href="index.html" class="nav-link">Home</a>
+                <a href="dashboard.html" class="nav-link">Dashboard</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="article-page">
+        <div class="article-container" id="articleContainer">
+            <div class="loading-state" id="loadingState">
+                <div class="loading-spinner"></div>
+                <span>Loading article...</span>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        let articleData = null;
+        let allArticles = [];
+        
+        document.addEventListener('DOMContentLoaded', loadArticle);
+        
+        async function loadArticle() {
+            const params = new URLSearchParams(window.location.search);
+            const slug = params.get('slug');
+            
+            if (!slug) { showError('No article specified'); return; }
+            
+            try {
+                // Try paginated API first
+                let article = null;
+                const articleRes = await fetch(`./api/articles/${slug}.json`).catch(() => null);
+                if (articleRes?.ok) {
+                    article = await articleRes.json();
+                } else {
+                    // Fallback to index
+                    const indexRes = await fetch('./api/articles/index.json');
+                    const indexData = await indexRes.json();
+                    allArticles = indexData.articles || [];
+                    article = allArticles.find(a => a.slug === slug);
+                }
+                
+                if (!article) { showError('Article not found'); return; }
+                
+                articleData = article;
+                document.title = `${article.title} — The Perplexity Archive`;
+                renderArticle(article);
+            } catch (error) {
+                console.error('Failed to load article:', error);
+                showError('Failed to load article');
+            }
+        }
+        
+        function renderArticle(article) {
+            const container = document.getElementById('articleContainer');
+            const sources = article.sources || [];
+            const confClass = (article.confidence_score >= 80 || article.confidence_score >= 0.8) ? 'high' : 'medium';
+            const score = article.confidence_score < 1 ? Math.round(article.confidence_score * 100) : article.confidence_score;
+            
+            container.innerHTML = `
+                <a href="index.html" class="back-link">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+                    Back to Archive
+                </a>
+                
+                <header class="article-page-header">
+                    <div class="article-page-meta">
+                        <span class="article-page-category">${escapeHtml(article.category)}</span>
+                        <span class="article-page-confidence ${confClass}">${score}% Confidence</span>
+                    </div>
+                    <h1 class="article-page-title">${escapeHtml(article.title)}</h1>
+                    <p class="article-page-excerpt">${escapeHtml(article.excerpt || '')}</p>
+                    <div class="article-page-stats">
+                        <span>📅 ${formatDate(article.created_at)}</span>
+                        <span>📚 ${sources.length || article.source_count || 0} sources</span>
+                    </div>
+                </header>
+                
+                <article class="article-full-content">
+                    ${renderContent(article.content)}
+                </article>
+                
+                ${sources.length > 0 ? `
+                <section class="article-sources">
+                    <h2 class="sources-title">📚 Sources (${sources.length})</h2>
+                    ${sources.map((s, i) => `
+                        <div class="source-item">
+                            <span class="source-number">${i + 1}</span>
+                            <div class="source-details">
+                                <div class="source-title"><a href="${escapeHtml(s.url || '#')}" target="_blank" rel="noopener">${escapeHtml(s.title)}</a></div>
+                                <div class="source-meta">${escapeHtml(s.source_type || 'Web')} ${s.publication_date ? '• ' + s.publication_date : ''}</div>
+                            </div>
+                        </div>
+                    `).join('')}
+                </section>
+                ` : ''}
+            `;
+        }
+        
+        function renderContent(content) {
+            if (!content) return '<p>Content not available.</p>';
+            const sections = content.split(/\n\n## /);
+            let html = '';
+            sections.forEach((section, i) => {
+                if (i === 0) {
+                    section.split('\n\n').forEach(p => { if (p.trim()) html += `<p>${escapeHtml(p.trim())}</p>`; });
+                } else {
+                    const lines = section.split('\n\n');
+                    html += `<h2>${escapeHtml(lines[0])}</h2>`;
+                    lines.slice(1).forEach(p => { if (p.trim()) html += `<p>${escapeHtml(p.trim())}</p>`; });
+                }
+            });
+            return html;
+        }
+        
+        function showError(message) {
+            document.getElementById('articleContainer').innerHTML = `
+                <div class="error-state">
+                    <h2>${escapeHtml(message)}</h2>
+                    <p>The article you're looking for might have been moved or doesn't exist.</p>
+                    <a href="index.html" class="search-btn">Return to Archive</a>
+                </div>
+            `;
+        }
+        
+        function formatDate(dateStr) {
+            if (!dateStr) return 'Unknown';
+            return new Date(dateStr).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+        }
+        
+        function escapeHtml(str) {
+            if (!str) return '';
+            const div = document.createElement('div');
+            div.textContent = str;
+            return div.innerHTML;
+        }
+    </script>
+</body>
+</html>
